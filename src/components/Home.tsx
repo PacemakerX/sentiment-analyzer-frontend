@@ -1,15 +1,33 @@
 import { useState } from "react";
 
+interface RagResult {
+  aspect: string;
+  sentiment: string;
+  confidence: number;
+  reasoning: string;
+}
+
+interface ResultItem {
+  id: string;
+  rag: RagResult[];
+}
+
+interface ApiResponse {
+  results: ResultItem[];
+  aggregate: {
+    rag_counts: {
+      positive: number;
+      negative: number;
+      neutral: number;
+    };
+  };
+  processing_time_ms: number;
+}
+
 function Home() {
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{
-    aspect: string;
-    sentiment: string;
-    confidence: number;
-    reasoning: string;
-    text: string;
-  } | null>(null);
+  const [results, setResults] = useState<ApiResponse | null>(null);
 
   const analyzeSentiment = async () => {
     if (!inputText.trim()) {
@@ -18,34 +36,36 @@ function Home() {
     }
 
     setIsLoading(true);
-    setResult(null);
+    setResults(null);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/v1/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          review_text: inputText,
-          include_baseline: true,
-        }),
-      });
+      const response = await fetch(
+        "http://127.0.0.1:8000/api/v1/batch-analyze",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            items: [
+              {
+                id: "r1",
+                text: inputText,
+              },
+            ],
+            include_baseline: false,
+            return_evidence: false,
+            max_concurrency: 1,
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("API request failed");
       }
 
-      const data = await response.json();
-      const ragResults = data.rag_results[0]; // Get first result
-
-      setResult({
-        aspect: ragResults.aspect,
-        sentiment: ragResults.sentiment,
-        confidence: ragResults.confidence,
-        reasoning: ragResults.reasoning,
-        text: inputText,
-      });
+      const data: ApiResponse = await response.json();
+      setResults(data);
     } catch (error) {
       console.error("Error analyzing sentiment:", error);
       alert("Failed to analyze sentiment. Please try again.");
@@ -82,7 +102,7 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 py-12 px-4">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl md:text-5xl font-bold text-indigo-900 mb-3">
@@ -147,73 +167,110 @@ function Home() {
             )}
           </button>
 
-          {/* Result Section */}
-          {result && (
+          {/* Results Section */}
+          {results && results.results.length > 0 && (
             <div className="mt-6 pt-6 border-t-2 border-gray-100 animate-fadeIn">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                Analysis Result
+                Analysis Results
               </h3>
 
-              {/* Aspect Badge */}
-              <div className="mb-4">
-                <span className="text-sm font-medium text-gray-600">
-                  Aspect:
-                </span>
-                <div className="mt-1 inline-block bg-indigo-100 text-indigo-800 px-4 py-2 rounded-full text-sm font-semibold ml-2">
-                  {result.aspect}
+              {/* Aggregate Stats */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                  <div className="text-3xl font-bold text-green-600">
+                    {results.aggregate.rag_counts.positive}
+                  </div>
+                  <div className="text-sm text-green-700 font-medium mt-1">
+                    Positive
+                  </div>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                  <div className="text-3xl font-bold text-red-600">
+                    {results.aggregate.rag_counts.negative}
+                  </div>
+                  <div className="text-sm text-red-700 font-medium mt-1">
+                    Negative
+                  </div>
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                  <div className="text-3xl font-bold text-gray-600">
+                    {results.aggregate.rag_counts.neutral}
+                  </div>
+                  <div className="text-sm text-gray-700 font-medium mt-1">
+                    Neutral
+                  </div>
                 </div>
               </div>
 
-              {/* Sentiment Badge */}
-              <div
-                className={`inline-flex items-center gap-2 px-6 py-3 rounded-full border-2 text-lg font-bold mb-4 ${getSentimentColor(
-                  result.sentiment
-                )}`}>
-                <span className="text-2xl">
-                  {getSentimentEmoji(result.sentiment)}
-                </span>
-                <span className="capitalize">{result.sentiment}</span>
-              </div>
+              {/* Individual Results */}
+              {results.results.map((result) => (
+                <div key={result.id} className="mb-6 last:mb-0">
+                  {result.rag.map((ragResult, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-gray-50 rounded-lg p-5 border border-gray-200 mb-4 last:mb-0">
+                      {/* Aspect Badge */}
+                      <div className="mb-3">
+                        <span className="inline-block bg-indigo-100 text-indigo-800 px-4 py-2 rounded-full text-sm font-semibold">
+                          {ragResult.aspect}
+                        </span>
+                      </div>
 
-              {/* Confidence Score */}
-              <div className="mb-4">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    Confidence
-                  </span>
-                  <span className="text-sm font-bold text-indigo-600">
-                    {(result.confidence * 100).toFixed(1)}%
-                  </span>
+                      {/* Sentiment Badge */}
+                      <div
+                        className={`inline-flex items-center gap-2 px-5 py-2 rounded-full border-2 text-base font-bold mb-3 ${getSentimentColor(
+                          ragResult.sentiment
+                        )}`}>
+                        <span className="text-xl">
+                          {getSentimentEmoji(ragResult.sentiment)}
+                        </span>
+                        <span className="capitalize">
+                          {ragResult.sentiment}
+                        </span>
+                      </div>
+
+                      {/* Confidence Score */}
+                      <div className="mb-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm font-medium text-gray-700">
+                            Confidence
+                          </span>
+                          <span className="text-sm font-bold text-indigo-600">
+                            {(ragResult.confidence * 100).toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
+                            style={{
+                              width: `${ragResult.confidence * 100}%`,
+                            }}></div>
+                        </div>
+                      </div>
+
+                      {/* Reasoning */}
+                      <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                        <p className="text-sm font-medium text-blue-900 mb-1">
+                          💡 Reasoning:
+                        </p>
+                        <p className="text-blue-800 text-sm leading-relaxed">
+                          {ragResult.reasoning}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-indigo-600 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${result.confidence * 100}%` }}></div>
-                </div>
-              </div>
+              ))}
 
-              {/* Reasoning */}
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mb-4">
-                <p className="text-sm font-medium text-blue-900 mb-2">
-                  💡 Reasoning:
-                </p>
-                <p className="text-blue-800 text-sm leading-relaxed">
-                  {result.reasoning}
-                </p>
-              </div>
-
-              {/* Analyzed Text */}
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  Analyzed Text:
-                </p>
-                <p className="text-gray-600 italic">"{result.text}"</p>
+              {/* Processing Time */}
+              <div className="text-center text-sm text-gray-500 mt-4">
+                Processed in {results.processing_time_ms}ms
               </div>
 
               {/* Clear Button */}
               <button
                 onClick={() => {
-                  setResult(null);
+                  setResults(null);
                   setInputText("");
                 }}
                 className="mt-4 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg transition duration-200">
