@@ -21,24 +21,101 @@ function Home() {
     setResult(null);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/v1/analyze", {
-        method: "POST",
+      // MOCK API - Remove this and use real API when backend is ready
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulate API delay
+
+      // Mock sentiment analysis logic
+      const text = inputText.toLowerCase();
+      let sentiment = "neutral";
+      let confidence = 0.7;
+      let aspect = "General";
+      let reasoning = "The text appears to have a neutral tone.";
+
+      // Simple keyword-based mock logic
+      const positiveWords = [
+        "great",
+        "excellent",
+        "amazing",
+        "good",
+        "love",
+        "wonderful",
+        "fantastic",
+        "best",
+        "awesome",
+      ];
+      const negativeWords = [
+        "bad",
+        "terrible",
+        "awful",
+        "hate",
+        "worst",
+        "poor",
+        "disappointing",
+        "useless",
+      ];
+
+      const hasPositive = positiveWords.some((word) => text.includes(word));
+      const hasNegative = negativeWords.some((word) => text.includes(word));
+
+      if (hasPositive && !hasNegative) {
+        sentiment = "positive";
+        confidence = 0.85;
+        reasoning =
+          "The text contains positive language and expressions indicating satisfaction.";
+      } else if (hasNegative && !hasPositive) {
+        sentiment = "negative";
+        confidence = 0.82;
+        reasoning =
+          "The text contains negative language and expressions indicating dissatisfaction.";
+      } else if (hasPositive && hasNegative) {
+        sentiment = "neutral";
+        confidence = 0.65;
+        reasoning =
+          "The text contains both positive and negative sentiments, resulting in a mixed or neutral overall tone.";
+      }
+
+      // Detect aspect from common keywords
+      if (text.includes("camera") || text.includes("photo")) aspect = "Camera";
+      else if (text.includes("battery") || text.includes("charge"))
+        aspect = "Battery";
+      else if (text.includes("screen") || text.includes("display"))
+        aspect = "Display";
+      else if (
+        text.includes("speaker") ||
+        text.includes("sound") ||
+        text.includes("audio")
+      )
+        aspect = "Audio";
+      else if (text.includes("design") || text.includes("look"))
+        aspect = "Design";
+
+      setResult({
+        aspect,
+        sentiment,
+        confidence,
+        reasoning,
+        text: inputText,
+      });
+
+      /* REAL API CODE - Uncomment when backend is ready:
+      const response = await fetch('http://127.0.0.1:8000/api/v1/analyze', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
+        body: JSON.stringify({ 
           review_text: inputText,
-          include_baseline: true,
+          include_baseline: true 
         }),
       });
 
       if (!response.ok) {
-        throw new Error("API request failed");
+        throw new Error('API request failed');
       }
 
       const data = await response.json();
-      const ragResults = data.rag_results[0]; // Get first result
-
+      const ragResults = data.rag_results[0];
+      
       setResult({
         aspect: ragResults.aspect,
         sentiment: ragResults.sentiment,
@@ -46,6 +123,7 @@ function Home() {
         reasoning: ragResults.reasoning,
         text: inputText,
       });
+      */
     } catch (error) {
       console.error("Error analyzing sentiment:", error);
       alert("Failed to analyze sentiment. Please try again.");
